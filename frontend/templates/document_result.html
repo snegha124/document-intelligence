@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Document Result</title>
+
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+    <header class="header">
+
+        <div>
+            <h1>Document Result</h1>
+            <p>Extracted information and financial validation</p>
+        </div>
+
+        <a href="/" class="back-link">
+            ← Back to Dashboard
+        </a>
+
+    </header>
+
+
+    <!-- Document Information -->
+
+    <section class="card">
+
+        <h2>Document Information</h2>
+
+        <div id="documentInfo" class="result-grid">
+            Loading...
+        </div>
+
+    </section>
+
+
+    <!-- Extraction -->
+
+    <section class="card">
+
+        <h2>Extracted Information</h2>
+
+        <div id="extractionContainer">
+            Loading extraction...
+        </div>
+
+    </section>
+
+
+    <!-- Validation -->
+
+    <section class="card">
+
+        <h2>Financial Validation</h2>
+
+        <div id="validationContainer">
+            Loading validation...
+        </div>
+
+    </section>
+
+
+    <!-- OCR -->
+
+    <section class="card">
+
+        <h2>OCR / Source Text</h2>
+
+        <pre id="ocrContainer" class="ocr-output">
+Loading OCR text...
+        </pre>
+
+    </section>
+
+</div>
+
+
+<script>
+
+const API_BASE = "/api/v1";
+
+
+// Get document name from URL
+const params = new URLSearchParams(window.location.search);
+
+const documentName = params.get("document");
+
+
+// HTML escaping
+function escapeHtml(value) {
+
+    if (value === null || value === undefined) {
+        return "";
+    }
+
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+
+// Format values nicely
+function formatValue(value) {
+
+    if (value === null || value === undefined || value === "") {
+        return "Not available";
+    }
+
+    if (typeof value === "object") {
+        return escapeHtml(JSON.stringify(value));
+    }
+
+    return escapeHtml(value);
+}
+
+
+// Create a simple field card
+function createField(label, value) {
+
+    return `
+        <div class="result-item">
+            <strong>${escapeHtml(label)}</strong>
+            <span>${formatValue(value)}</span>
+        </div>
+    `;
+}
+
+
+// Create extraction section
+function renderExtraction(extraction) {
+
+    if (!extraction) {
+
+        return `
+            <div class="message error">
+                No extraction data available.
+            </div>
+        `;
+    }
+
+
+    let html = "";
+
+
+    // Invoice
+    if (extraction.invoice) {
+
+        const invoice = extraction.invoice;
+
+        html += `<h3>Invoice</h3>`;
+
+        html += `<div class="result-grid">`;
+
+        html += createField(
+            "Invoice Number",
+            invoice.invoice_number
+        );
+
+        html += createField(
+            "Invoice Date",
+            invoice.invoice_date
+        );
+
+        html += createField(
+            "Vendor",
+            invoice.vendor_name
+        );
+
+        html += createField(
+            "Vendor Address",
+            invoice.vendor_address
+        );
+
+        html += createField(
+            "Vendor Tax ID",
+            invoice.vendor_tax_id
+        );
+
+        html += createField(
+            "Customer",
+            invoice.customer_name
+        );
+
+        html += createField(
+            "Currency",
+            invoice.currency
+        );
+
+        html += createField(
+            "Subtotal",
+            invoice.subtotal
+        );
+
+        html += createField(
+            "Tax",
+            invoice.tax
+        );
+
+        html += createField(
+            "Discount",
+            invoice.discount
+        );
+
+        html += createField(
+            "Total",
+            invoice.total
+        );
+
+        html += createField(
+            "Payment Method",
+            invoice.payment_method
+        );
+
+        html += createField(
+            "Reference Number",
+            invoice.reference_number
+        );
+
+        html += `</div>`;
+
+
+        // Invoice line items
+        if (invoice.line_items && invoice.line_items.length > 0) {
+
+            html += `<h3>Line Items</h3>`;
+
+            html += `
+                <div class="table-container">
+
+                    <table>
+
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Quantity</th>
+                                <th>Unit Price</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+            `;
+
+
+            invoice.line_items.forEach(item => {
+
+                html += `
+                    <tr>
+                        <td>${formatValue(item.description)}</td>
+                        <td>${formatValue(item.quantity)}</td>
+                        <td>${formatValue(item.unit_price)}</td>
+                        <td>${formatValue(item.amount)}</td>
+                    </tr>
+                `;
+
+            });
+
+
+            html += `
+                        </tbody>
+
+                    </table>
+
+                </div>
+            `;
+        }
+    }
+
+
+    // Balance Sheet
+    if (extraction.balance_sheet) {
+
+        const balance = extraction.balance_sheet;
+
+        html += `<h3>Balance Sheet</h3>`;
+
+        html += `<div class="result-grid">`;
+
+        html += createField(
+            "Company",
+            balance.company_name
+        );
+
+        html += createField(
+            "Statement Date",
+            balance.statement_date
+        );
+
+        html += createField(
+            "Currency",
+            balance.currency
+        );
+
+        html += createField(
+            "Unit",
+            balance.unit
+        );
+
+        html += createField(
+            "Total Assets",
+            balance.total_assets
+        );
+
+        html += createField(
+            "Total Liabilities",
+            balance.total_liabilities
+        );
+
+        html += createField(
+            "Total Equity",
+            balance.total_equity
+        );
+
+        html += `</div>`;
+
+
+        html += renderFinancialLines(
+            "Assets",
+            balance.assets
+        );
+
+        html += renderFinancialLines(
+            "Liabilities",
+            balance.liabilities
+        );
+
+        html += renderFinancialLines(
+            "Equity",
+            balance.equity
+        );
+    }
+
+
+    // Profit & Loss
+    if (extraction.profit_loss) {
+
+        const profitLoss = extraction.profit_loss;
+
+        html += `<h3>Profit & Loss</h3>`;
+
+        html += `<div class="result-grid">`;
+
+        html += createField(
+            "Company",
+            profitLoss.company_name
+        );
+
+        html += createField(
+            "Statement Date",
+            profitLoss.statement_date
+        );
+
+        html += createField(
+            "Currency",
+            profitLoss.currency
+        );
+
+        html += createField(
+            "Unit",
+            profitLoss.unit
+        );
+
+        html += createField(
+            "Total Income",
+            profitLoss.total_income
+        );
+
+        html += createField(
+            "Total Expenses",
+            profitLoss.total_expenses
+        );
+
+        html += createField(
+            "Profit Before Tax",
+            profitLoss.profit_before_tax
+        );
+
+        html += createField(
+            "Tax Expense",
+            profitLoss.tax_expense
+        );
+
+        html += createField(
+            "Net Profit",
+            profitLoss.net_profit
+        );
+
+        html += `</div>`;
+
+
+        html += renderFinancialLines(
+            "Income",
+            profitLoss.income
+        );
+
+        html += renderFinancialLines(
+            "Expenses",
+            profitLoss.expenses
+        );
+    }
+
+
+    // Cash Flow
+    if (extraction.cash_flow) {
+
+        const cashFlow = extraction.cash_flow;
+
+        html += `<h3>Cash Flow</h3>`;
+
+        html += `<div class="result-grid">`;
+
+        html += createField(
+            "Company",
+            cashFlow.company_name
+        );
+
+        html += createField(
+            "Statement Date",
+            cashFlow.statement_date
+        );
+
+        html += createField(
+            "Currency",
+            cashFlow.currency
+        );
+
+        html += createField(
+            "Unit",
+            cashFlow.unit
+        );
+
+        html += createField(
+            "Foreign Exchange Effect",
+            cashFlow.foreign_exchange_effect
+        );
+
+        html += createField(
+            "Net Cash Change",
+            cashFlow.net_cash_change
+        );
+
+        html += createField(
+            "Opening Cash Balance",
+            cashFlow.opening_cash_balance
+        );
+
+        html += createField(
+            "Closing Cash Balance",
+            cashFlow.closing_cash_balance
+        );
+
+        html += `</div>`;
+
+
+        html += renderFinancialLines(
+            "Operating Activities",
+            cashFlow.operating_activities
+        );
+
+        html += renderFinancialLines(
+            "Investing Activities",
+            cashFlow.investing_activities
+        );
+
+        html += renderFinancialLines(
+            "Financing Activities",
+            cashFlow.financing_activities
+        );
+    }
+
+
+    return html;
+}
+
+
+// Render financial statement line items
+function renderFinancialLines(title, lines) {
+
+    if (!lines || lines.length === 0) {
+        return "";
+    }
+
+
+    let html = `
+        <h3>${escapeHtml(title)}</h3>
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Line Item</th>
+                        <th>Current Period</th>
+                        <th>Previous Period</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+    `;
+
+
+    lines.forEach(line => {
+
+        html += `
+            <tr>
+
+                <td>
+                    ${formatValue(line.name)}
+                </td>
+
+                <td>
+                    ${formatValue(line.current_period)}
+                </td>
+
+                <td>
+                    ${formatValue(line.previous_period)}
+                </td>
+
+            </tr>
+        `;
+
+    });
+
+
+    html += `
+                </tbody>
+
+            </table>
+
+        </div>
+    `;
+
+
+    return html;
+}
+
+
+// Render validation
+function renderValidation(validation) {
+
+    if (!validation) {
+
+        return `
+            <div class="message error">
+                No validation information available.
+            </div>
+        `;
+    }
+
+
+    let html = "";
+
+    const overallStatus =
+        validation.overall_status || "unknown";
+
+
+    const statusClass =
+        overallStatus.toLowerCase() === "passed"
+            ? "validation-passed"
+            : "validation-failed";
+
+
+    html += `
+        <div class="${statusClass}">
+            Overall Validation:
+            <strong>
+                ${escapeHtml(overallStatus.toUpperCase())}
+            </strong>
+        </div>
+    `;
+
+
+    // Display validation checks
+    if (Array.isArray(validation.checks)) {
+
+        html += `
+            <h3>Validation Checks</h3>
+
+            <div class="table-container">
+
+                <table>
+
+                    <thead>
+                        <tr>
+                            <th>Check</th>
+                            <th>Status</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+        `;
+
+
+        validation.checks.forEach(check => {
+
+            const checkStatus =
+                check.status || check.result || "unknown";
+
+
+            html += `
+                <tr>
+
+                    <td>
+                        ${formatValue(
+                            check.name ||
+                            check.check ||
+                            "Validation"
+                        )}
+                    </td>
+
+                    <td>
+                        ${formatValue(checkStatus)}
+                    </td>
+
+                    <td>
+                        ${formatValue(
+                            check.message ||
+                            check.details ||
+                            ""
+                        )}
+                    </td>
+
+                </tr>
+            `;
+
+        });
+
+
+        html += `
+                    </tbody>
+
+                </table>
+
+            </div>
+        `;
+    }
+
+
+    // Display any additional validation data
+    const additionalData = { ...validation };
+
+    delete additionalData.overall_status;
+    delete additionalData.checks;
+
+
+    if (Object.keys(additionalData).length > 0) {
+
+        html += `
+            <details>
+
+                <summary>
+                    Additional validation details
+                </summary>
+
+                <pre class="json-output">
+${escapeHtml(
+    JSON.stringify(additionalData, null, 2)
+)}
+                </pre>
+
+            </details>
+        `;
+    }
+
+
+    return html;
+}
+
+
+// Load document
+async function loadDocument() {
+
+    if (!documentName) {
+
+        document.getElementById("documentInfo").innerHTML = `
+            <div class="message error">
+                No document name was provided.
+            </div>
+        `;
+
+        document.getElementById("extractionContainer").innerHTML = "";
+        document.getElementById("validationContainer").innerHTML = "";
+        document.getElementById("ocrContainer").textContent = "";
+
+        return;
+    }
+
+
+    try {
+
+        const response = await fetch(
+            `${API_BASE}/documents/${documentName}`
+        );
+
+
+        const data = await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.detail || "Unable to load document."
+            );
+        }
+
+
+        // Document information
+        document.getElementById("documentInfo").innerHTML =
+
+            createField(
+                "Document Name",
+                data.document_name
+            )
+
+            +
+
+            createField(
+                "Document Type",
+                data.document_type
+            )
+
+            +
+
+            createField(
+                "Status",
+                data.status
+            )
+
+            +
+
+            createField(
+                "Created At",
+                data.created_at
+            );
+
+
+        // Extraction
+        document.getElementById(
+            "extractionContainer"
+        ).innerHTML = renderExtraction(
+            data.extraction
+        );
+
+
+        // Validation
+        document.getElementById(
+            "validationContainer"
+        ).innerHTML = renderValidation(
+            data.validation
+        );
+
+
+        // OCR
+        document.getElementById(
+            "ocrContainer"
+        ).textContent =
+            data.ocr_text || "No OCR text available.";
+
+
+    } catch (error) {
+
+        document.getElementById("documentInfo").innerHTML = `
+            <div class="message error">
+                ${escapeHtml(error.message)}
+            </div>
+        `;
+
+        document.getElementById("extractionContainer").innerHTML = "";
+        document.getElementById("validationContainer").innerHTML = "";
+        document.getElementById("ocrContainer").textContent = "";
+    }
+}
+
+
+loadDocument();
+
+</script>
+
+</body>
+</html>

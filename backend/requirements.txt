@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-multipart
+pydantic
+sqlalchemy
+pymupdf
+pillow
+pytesseract
+google-genai
+pytest
+httpx
