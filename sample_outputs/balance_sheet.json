@@ -1,0 +1,27 @@
+{
+  "document_name": "Consolidated Balance Sheet 2019.pdf",
+  "document_type": "balance_sheet",
+  "status": "processed",
+  "extraction": {
+    "company_name": "HDFC Bank Limited",
+    "statement_date": "March 31, 2019",
+    "currency": "₹",
+    "unit": "'000",
+    "assets": {
+      "line_items": [],
+      "total_assets": 12928057065
+    },
+    "liabilities": {
+      "line_items": [],
+      "total_liabilities": null
+    },
+    "equity": {
+      "line_items": [],
+      "total_equity": null
+    }
+  },
+  "validation": {
+    "overall_status": "PASSED",
+    "checks": []
+  }
+}

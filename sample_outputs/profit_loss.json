@@ -1,0 +1,63 @@
+{
+  "document_name": "Consolidated Profit & Loss 2024.pdf",
+  "document_type": "profit_loss",
+  "status": "processed",
+  "extraction": {
+    "statement_date": "March 31, 2024",
+    "currency": "INR",
+    "unit": "crore",
+    "income": [
+      {
+        "name": "Interest earned",
+        "current_period": 283649.02,
+        "previous_period": 170754.05
+      },
+      {
+        "name": "Other income",
+        "current_period": 124345.75,
+        "previous_period": 33912.05
+      }
+    ],
+    "total_income": {
+      "current_period": 407994.77,
+      "previous_period": null
+    },
+    "expenses": [
+      {
+        "name": "Interest expended",
+        "current_period": 154138.55,
+        "previous_period": 77779.94
+      },
+      {
+        "name": "Operating expenses",
+        "current_period": 152269.34,
+        "previous_period": 51533.69
+      },
+      {
+        "name": "Provisions",
+        "current_period": 36140.38,
+        "previous_period": 29203.77
+      }
+    ],
+    "total_expenses": {
+      "current_period": 342548.27,
+      "previous_period": null
+    },
+    "profit_before_minority_interest": {
+      "current_period": 65446.50,
+      "previous_period": 46148.70
+    },
+    "minority_interest": {
+      "current_period": 1384.46,
+      "previous_period": 151.59
+    },
+    "attributable_group_profit": {
+      "current_period": 64062.04,
+      "previous_period": 45997.11
+    }
+  },
+  "validation": {
+    "overall_status": "PASSED",
+    "checks": []
+  }
+}

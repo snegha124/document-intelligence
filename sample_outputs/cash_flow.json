@@ -1,0 +1,21 @@
+{
+  "document_name": "sample_cash_flow.pdf",
+  "document_type": "cash_flow",
+  "status": "processed",
+  "extraction": {
+    "statement_date": null,
+    "currency": null,
+    "unit": null,
+    "operating_activities": [],
+    "investing_activities": [],
+    "financing_activities": [],
+    "foreign_exchange_effect": null,
+    "net_cash_change": null,
+    "opening_cash": null,
+    "closing_cash": null
+  },
+  "validation": {
+    "overall_status": "PASSED",
+    "checks": []
+  }
+}

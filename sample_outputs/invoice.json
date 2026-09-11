@@ -1,0 +1,22 @@
+{
+  "document_name": "sample_invoice.jpg",
+  "document_type": "invoice",
+  "status": "processed",
+  "extraction": {
+    "invoice_number": null,
+    "invoice_date": null,
+    "due_date": null,
+    "vendor": null,
+    "customer": null,
+    "currency": null,
+    "subtotal": null,
+    "tax": null,
+    "discount": null,
+    "total": null,
+    "line_items": []
+  },
+  "validation": {
+    "overall_status": "PASSED",
+    "checks": []
+  }
+}
