@@ -8,7 +8,31 @@ from backend.app.schemas.extraction import (
 )
 
 
-TOLERANCE = 0.05
+# =============================================================
+# VALIDATION SETTINGS
+# =============================================================
+
+ABSOLUTE_TOLERANCE = 0.05
+
+# 0.5% relative tolerance for large financial values.
+RELATIVE_TOLERANCE = 0.005
+
+
+def numbers_match(expected, actual) -> bool:
+    """
+    Compare two financial values using both absolute
+    and relative tolerance.
+    """
+
+    if expected is None or actual is None:
+        return False
+
+    return isclose(
+        float(expected),
+        float(actual),
+        abs_tol=ABSOLUTE_TOLERANCE,
+        rel_tol=RELATIVE_TOLERANCE,
+    )
 
 
 def build_validation_result(
@@ -16,12 +40,26 @@ def build_validation_result(
 ) -> dict:
 
     failed = any(
-        check["status"] == "failed"
+        check.get("status") == "failed"
         for check in checks
     )
 
+    passed = any(
+        check.get("status") == "passed"
+        for check in checks
+    )
+
+    if failed:
+        overall_status = "failed"
+
+    elif passed:
+        overall_status = "passed"
+
+    else:
+        overall_status = "not_checkable"
+
     return {
-        "overall_status": "failed" if failed else "passed",
+        "overall_status": overall_status,
         "checks": checks,
     }
 
@@ -37,51 +75,84 @@ def validate_invoice(
     checks = []
 
     # ---------------------------------------------------------
-    # Check quantity × unit price ≈ line amount
+    # Quantity × Unit Price ≈ Line Amount
     # ---------------------------------------------------------
-    for item in invoice.line_items:
 
-        if (
-            item.quantity is not None
-            and item.unit_price is not None
-            and item.amount is not None
+    if not invoice.line_items:
+
+        checks.append({
+            "check": "quantity_times_unit_price",
+            "status": "not_checkable",
+            "reason": "No invoice line items were extracted.",
+        })
+
+    else:
+
+        for index, item in enumerate(
+            invoice.line_items,
+            start=1,
         ):
 
-            expected = item.quantity * item.unit_price
-            actual = item.amount
+            if (
+                item.quantity is not None
+                and item.unit_price is not None
+                and item.amount is not None
+            ):
 
-            passed = isclose(
-                expected,
-                actual,
-                abs_tol=TOLERANCE
-            )
+                expected = (
+                    item.quantity
+                    * item.unit_price
+                )
 
-            checks.append({
-                "check": "quantity_times_unit_price",
-                "description": item.description,
-                "expected": expected,
-                "actual": actual,
-                "status": "passed" if passed else "failed",
-            })
+                actual = item.amount
 
-        else:
+                passed = numbers_match(
+                    expected,
+                    actual,
+                )
 
-            checks.append({
-                "check": "quantity_times_unit_price",
-                "description": item.description,
-                "status": "not_checkable",
-            })
+                checks.append({
+                    "check": "quantity_times_unit_price",
+                    "line_item": index,
+                    "description": item.description,
+                    "expected": expected,
+                    "actual": actual,
+                    "status": (
+                        "passed"
+                        if passed
+                        else "failed"
+                    ),
+                })
+
+            else:
+
+                checks.append({
+                    "check": "quantity_times_unit_price",
+                    "line_item": index,
+                    "description": item.description,
+                    "status": "not_checkable",
+                })
 
     # ---------------------------------------------------------
-    # Check subtotal + tax - discount ≈ total
+    # Subtotal + Tax - Discount ≈ Total
     # ---------------------------------------------------------
+
     if (
         invoice.subtotal is not None
         and invoice.total is not None
     ):
 
-        tax = invoice.tax or 0
-        discount = invoice.discount or 0
+        tax = (
+            invoice.tax
+            if invoice.tax is not None
+            else 0
+        )
+
+        discount = (
+            invoice.discount
+            if invoice.discount is not None
+            else 0
+        )
 
         expected_total = (
             invoice.subtotal
@@ -89,17 +160,22 @@ def validate_invoice(
             - discount
         )
 
-        passed = isclose(
+        actual_total = invoice.total
+
+        passed = numbers_match(
             expected_total,
-            invoice.total,
-            abs_tol=TOLERANCE
+            actual_total,
         )
 
         checks.append({
             "check": "subtotal_tax_discount_total",
             "expected": expected_total,
-            "actual": invoice.total,
-            "status": "passed" if passed else "failed",
+            "actual": actual_total,
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
         })
 
     else:
@@ -109,7 +185,9 @@ def validate_invoice(
             "status": "not_checkable",
         })
 
-    return build_validation_result(checks)
+    return build_validation_result(
+        checks
+    )
 
 
 # =============================================================
@@ -123,44 +201,111 @@ def validate_balance_sheet(
     checks = []
 
     # ---------------------------------------------------------
-    # Check assets ≈ liabilities + equity
+    # Get explicit totals first
     # ---------------------------------------------------------
+
+    total_assets = (
+        balance_sheet.total_assets
+    )
+
+    total_liabilities = (
+        balance_sheet.total_liabilities
+    )
+
+    total_equity = (
+        balance_sheet.total_equity
+    )
+
+    # ---------------------------------------------------------
+    # Derive liabilities if explicit total is unavailable
+    # ---------------------------------------------------------
+
     if (
-        balance_sheet.total_assets is not None
-        and balance_sheet.total_liabilities is not None
-        and balance_sheet.total_equity is not None
+        total_liabilities is None
+        and balance_sheet.liabilities
+    ):
+
+        liability_values = [
+            item.current_period
+            for item in balance_sheet.liabilities
+            if item.current_period is not None
+        ]
+
+        if liability_values:
+            total_liabilities = sum(
+                liability_values
+            )
+
+    # ---------------------------------------------------------
+    # Derive equity if explicit total is unavailable
+    # ---------------------------------------------------------
+
+    if (
+        total_equity is None
+        and balance_sheet.equity
+    ):
+
+        equity_values = [
+            item.current_period
+            for item in balance_sheet.equity
+            if item.current_period is not None
+        ]
+
+        if equity_values:
+            total_equity = sum(
+                equity_values
+            )
+
+    # ---------------------------------------------------------
+    # Assets ≈ Liabilities + Equity
+    # ---------------------------------------------------------
+
+    if (
+        total_assets is not None
+        and total_liabilities is not None
+        and total_equity is not None
     ):
 
         expected = (
-            balance_sheet.total_liabilities
-            + balance_sheet.total_equity
+            total_liabilities
+            + total_equity
         )
 
-        actual = balance_sheet.total_assets
+        actual = total_assets
 
-        passed = isclose(
+        passed = numbers_match(
             expected,
             actual,
-            abs_tol=TOLERANCE
         )
 
         checks.append({
-            "check": "assets_equals_liabilities_plus_equity",
+            "check": (
+                "assets_equals_liabilities_plus_equity"
+            ),
             "expected": expected,
             "actual": actual,
-            "status": "passed" if passed else "failed",
+            "derived_liabilities": total_liabilities,
+            "derived_equity": total_equity,
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
         })
 
     else:
 
         checks.append({
-            "check": "assets_equals_liabilities_plus_equity",
+            "check": (
+                "assets_equals_liabilities_plus_equity"
+            ),
             "status": "not_checkable",
         })
 
     # ---------------------------------------------------------
-    # Check asset line items against total assets
+    # Asset line items ≈ Total Assets
     # ---------------------------------------------------------
+
     asset_values = [
         item.current_period
         for item in balance_sheet.assets
@@ -173,19 +318,25 @@ def validate_balance_sheet(
     ):
 
         expected = sum(asset_values)
-        actual = balance_sheet.total_assets
 
-        passed = isclose(
+        actual = (
+            balance_sheet.total_assets
+        )
+
+        passed = numbers_match(
             expected,
             actual,
-            abs_tol=TOLERANCE
         )
 
         checks.append({
             "check": "asset_line_items_sum",
             "expected": expected,
             "actual": actual,
-            "status": "passed" if passed else "failed",
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
         })
 
     else:
@@ -195,7 +346,97 @@ def validate_balance_sheet(
             "status": "not_checkable",
         })
 
-    return build_validation_result(checks)
+    # ---------------------------------------------------------
+    # Liability line items ≈ Total Liabilities
+    # ---------------------------------------------------------
+
+    liability_values = [
+        item.current_period
+        for item in balance_sheet.liabilities
+        if item.current_period is not None
+    ]
+
+    if (
+        liability_values
+        and total_liabilities is not None
+    ):
+
+        expected = sum(
+            liability_values
+        )
+
+        actual = total_liabilities
+
+        passed = numbers_match(
+            expected,
+            actual,
+        )
+
+        checks.append({
+            "check": "liability_line_items_sum",
+            "expected": expected,
+            "actual": actual,
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
+        })
+
+    else:
+
+        checks.append({
+            "check": "liability_line_items_sum",
+            "status": "not_checkable",
+        })
+
+    # ---------------------------------------------------------
+    # Equity line items ≈ Total Equity
+    # ---------------------------------------------------------
+
+    equity_values = [
+        item.current_period
+        for item in balance_sheet.equity
+        if item.current_period is not None
+    ]
+
+    if (
+        equity_values
+        and total_equity is not None
+    ):
+
+        expected = sum(
+            equity_values
+        )
+
+        actual = total_equity
+
+        passed = numbers_match(
+            expected,
+            actual,
+        )
+
+        checks.append({
+            "check": "equity_line_items_sum",
+            "expected": expected,
+            "actual": actual,
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
+        })
+
+    else:
+
+        checks.append({
+            "check": "equity_line_items_sum",
+            "status": "not_checkable",
+        })
+
+    return build_validation_result(
+        checks
+    )
 
 
 # =============================================================
@@ -209,8 +450,9 @@ def validate_profit_loss(
     checks = []
 
     # ---------------------------------------------------------
-    # Check income line items against total income
+    # Income line items ≈ Total Income
     # ---------------------------------------------------------
+
     income_values = [
         item.current_period
         for item in profit_loss.income
@@ -222,20 +464,28 @@ def validate_profit_loss(
         and profit_loss.total_income is not None
     ):
 
-        expected = sum(income_values)
-        actual = profit_loss.total_income
+        expected = sum(
+            income_values
+        )
 
-        passed = isclose(
+        actual = (
+            profit_loss.total_income
+        )
+
+        passed = numbers_match(
             expected,
             actual,
-            abs_tol=TOLERANCE
         )
 
         checks.append({
             "check": "income_line_items_sum",
             "expected": expected,
             "actual": actual,
-            "status": "passed" if passed else "failed",
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
         })
 
     else:
@@ -246,8 +496,9 @@ def validate_profit_loss(
         })
 
     # ---------------------------------------------------------
-    # Check expense line items against total expenses
+    # Expense line items ≈ Total Expenses
     # ---------------------------------------------------------
+
     expense_values = [
         item.current_period
         for item in profit_loss.expenses
@@ -259,20 +510,28 @@ def validate_profit_loss(
         and profit_loss.total_expenses is not None
     ):
 
-        expected = sum(expense_values)
-        actual = profit_loss.total_expenses
+        expected = sum(
+            expense_values
+        )
 
-        passed = isclose(
+        actual = (
+            profit_loss.total_expenses
+        )
+
+        passed = numbers_match(
             expected,
             actual,
-            abs_tol=TOLERANCE
         )
 
         checks.append({
             "check": "expense_line_items_sum",
             "expected": expected,
             "actual": actual,
-            "status": "passed" if passed else "failed",
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
         })
 
     else:
@@ -283,8 +542,9 @@ def validate_profit_loss(
         })
 
     # ---------------------------------------------------------
-    # Check total income - total expenses ≈ profit before tax
+    # Total Income - Total Expenses ≈ Profit Before Tax
     # ---------------------------------------------------------
+
     if (
         profit_loss.total_income is not None
         and profit_loss.total_expenses is not None
@@ -296,32 +556,45 @@ def validate_profit_loss(
             - profit_loss.total_expenses
         )
 
-        actual = profit_loss.profit_before_tax
+        actual = (
+            profit_loss.profit_before_tax
+        )
 
-        passed = isclose(
+        passed = numbers_match(
             expected,
             actual,
-            abs_tol=TOLERANCE
         )
 
         checks.append({
-            "check": "income_minus_expenses_equals_profit_before_tax",
+            "check": (
+                "income_minus_expenses_equals_profit_before_tax"
+            ),
             "expected": expected,
             "actual": actual,
-            "status": "passed" if passed else "failed",
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
         })
 
     else:
 
         checks.append({
-            "check": "income_minus_expenses_equals_profit_before_tax",
+            "check": (
+                "income_minus_expenses_equals_profit_before_tax"
+            ),
             "status": "not_checkable",
         })
 
     # ---------------------------------------------------------
-    # Check consolidated profit using raw fields
+    # Consolidated Profit Check
     # ---------------------------------------------------------
-    raw_fields = profit_loss.raw_fields
+
+    raw_fields = (
+        profit_loss.raw_fields
+        or {}
+    )
 
     minority_interest = raw_fields.get(
         "minority_interest"
@@ -332,48 +605,93 @@ def validate_profit_loss(
     )
 
     consolidated_profit = raw_fields.get(
-        "consolidated_profit_for_the_year_attributable_to_the_group"
+        "consolidated_profit_for_the_year"
+    )
+
+    if consolidated_profit is None:
+
+        consolidated_profit = raw_fields.get(
+            "consolidated_profit_for_the_year_attributable_to_the_group"
+        )
+
+    def get_current_value(value):
+
+        if not isinstance(value, dict):
+            return None
+
+        if value.get("current_period") is not None:
+            return value.get(
+                "current_period"
+            )
+
+        if value.get("current") is not None:
+            return value.get(
+                "current"
+            )
+
+        return None
+
+    minority_current = get_current_value(
+        minority_interest
+    )
+
+    share_current = get_current_value(
+        share_in_profits
+    )
+
+    consolidated_current = get_current_value(
+        consolidated_profit
     )
 
     if (
         profit_loss.net_profit is not None
-        and isinstance(minority_interest, dict)
-        and isinstance(share_in_profits, dict)
-        and isinstance(consolidated_profit, dict)
-        and minority_interest.get("current") is not None
-        and share_in_profits.get("current") is not None
-        and consolidated_profit.get("current") is not None
+        and minority_current is not None
+        and share_current is not None
+        and consolidated_current is not None
     ):
 
         expected = (
             profit_loss.net_profit
-            - minority_interest["current"]
-            + share_in_profits["current"]
+            - minority_current
+            + share_current
         )
 
-        actual = consolidated_profit["current"]
+        actual = (
+            consolidated_current
+        )
 
-        passed = isclose(
+        passed = numbers_match(
             expected,
             actual,
-            abs_tol=TOLERANCE
         )
 
         checks.append({
-            "check": "net_profit_minority_interest_associates",
+            "check": (
+                "net_profit_minority_interest_associates"
+            ),
             "expected": expected,
             "actual": actual,
-            "status": "passed" if passed else "failed",
+            "minority_interest": minority_current,
+            "share_in_profits_of_associates": share_current,
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
         })
 
     else:
 
         checks.append({
-            "check": "net_profit_minority_interest_associates",
+            "check": (
+                "net_profit_minority_interest_associates"
+            ),
             "status": "not_checkable",
         })
 
-    return build_validation_result(checks)
+    return build_validation_result(
+        checks
+    )
 
 
 # =============================================================
@@ -387,8 +705,9 @@ def validate_cash_flow(
     checks = []
 
     # ---------------------------------------------------------
-    # Sum operating activities
+    # Operating activities
     # ---------------------------------------------------------
+
     operating_values = [
         item.current_period
         for item in cash_flow.operating_activities
@@ -402,8 +721,9 @@ def validate_cash_flow(
     )
 
     # ---------------------------------------------------------
-    # Sum investing activities
+    # Investing activities
     # ---------------------------------------------------------
+
     investing_values = [
         item.current_period
         for item in cash_flow.investing_activities
@@ -417,8 +737,9 @@ def validate_cash_flow(
     )
 
     # ---------------------------------------------------------
-    # Sum financing activities
+    # Financing activities
     # ---------------------------------------------------------
+
     financing_values = [
         item.current_period
         for item in cash_flow.financing_activities
@@ -432,14 +753,10 @@ def validate_cash_flow(
     )
 
     # ---------------------------------------------------------
-    # Check:
-    #
-    # Operating
-    # + Investing
-    # + Financing
-    # + FX
+    # Operating + Investing + Financing + FX
     # ≈ Net Cash Change
     # ---------------------------------------------------------
+
     if (
         operating_total is not None
         and investing_total is not None
@@ -447,7 +764,11 @@ def validate_cash_flow(
         and cash_flow.net_cash_change is not None
     ):
 
-        fx = cash_flow.foreign_exchange_effect or 0
+        fx = (
+            cash_flow.foreign_exchange_effect
+            if cash_flow.foreign_exchange_effect is not None
+            else 0
+        )
 
         expected = (
             operating_total
@@ -456,35 +777,45 @@ def validate_cash_flow(
             + fx
         )
 
-        actual = cash_flow.net_cash_change
+        actual = (
+            cash_flow.net_cash_change
+        )
 
-        passed = isclose(
+        passed = numbers_match(
             expected,
             actual,
-            abs_tol=TOLERANCE
         )
 
         checks.append({
-            "check": "operating_investing_financing_fx_equals_net_cash_change",
+            "check": (
+                "operating_investing_financing_fx_equals_net_cash_change"
+            ),
             "operating": operating_total,
             "investing": investing_total,
             "financing": financing_total,
             "foreign_exchange": fx,
             "expected": expected,
             "actual": actual,
-            "status": "passed" if passed else "failed",
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
         })
 
     else:
 
         checks.append({
-            "check": "operating_investing_financing_fx_equals_net_cash_change",
+            "check": (
+                "operating_investing_financing_fx_equals_net_cash_change"
+            ),
             "status": "not_checkable",
         })
 
     # ---------------------------------------------------------
-    # Check opening cash + net change ≈ closing cash
+    # Opening Cash + Net Change ≈ Closing Cash
     # ---------------------------------------------------------
+
     if (
         cash_flow.opening_cash_balance is not None
         and cash_flow.net_cash_change is not None
@@ -496,26 +827,37 @@ def validate_cash_flow(
             + cash_flow.net_cash_change
         )
 
-        actual = cash_flow.closing_cash_balance
+        actual = (
+            cash_flow.closing_cash_balance
+        )
 
-        passed = isclose(
+        passed = numbers_match(
             expected,
             actual,
-            abs_tol=TOLERANCE
         )
 
         checks.append({
-            "check": "opening_cash_plus_net_change_equals_closing_cash",
+            "check": (
+                "opening_cash_plus_net_change_equals_closing_cash"
+            ),
             "expected": expected,
             "actual": actual,
-            "status": "passed" if passed else "failed",
+            "status": (
+                "passed"
+                if passed
+                else "failed"
+            ),
         })
 
     else:
 
         checks.append({
-            "check": "opening_cash_plus_net_change_equals_closing_cash",
+            "check": (
+                "opening_cash_plus_net_change_equals_closing_cash"
+            ),
             "status": "not_checkable",
         })
 
-    return build_validation_result(checks)
+    return build_validation_result(
+        checks
+    )
