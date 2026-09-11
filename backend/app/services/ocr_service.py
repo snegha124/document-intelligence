@@ -1,15 +1,21 @@
 import io
 import os
+import shutil
 
 import pymupdf
 import pytesseract
 from PIL import Image
 
 
-TESSERACT_PATH = os.getenv(
-    "TESSERACT_CMD",
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+# Use an explicitly configured Tesseract path when provided.
+# Otherwise use the correct default for the operating system.
+TESSERACT_PATH = os.getenv("TESSERACT_CMD")
+
+if not TESSERACT_PATH:
+    if os.name == "nt":
+        TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    else:
+        TESSERACT_PATH = shutil.which("tesseract") or "tesseract"
 
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
